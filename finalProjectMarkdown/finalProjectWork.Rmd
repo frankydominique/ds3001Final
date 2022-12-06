@@ -1,0 +1,81 @@
+---
+title: "finalProjectWork"
+output: html_document
+date: "2022-12-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(plotly)
+library(htmltools)
+library(devtools)
+library(caret)
+library(NbClust)
+library(rmarkdown)
+```
+
+```{r}
+df <- read_csv('song_data.csv')
+View(df)
+dfs <- as.data.frame(scale(df[2:15]))
+View(dfs)
+dfs <- cbind(dfs, df[1])
+```
+
+```{r}
+normalize <- function(x) {
+  
+}
+```
+
+
+# Data Cleaning
+
+```{r}
+dfs <- dfs[!(dfs['song_duration_ms'] >= 4),]
+dfs['hype'] <- dfs['energy'] + dfs['danceability']+dfs['loudness']+dfs['audio_valence']+dfs['tempo']
+dfs['performance'] <- dfs['liveness'] + dfs['speechiness']
+dfs['rawness'] <- dfs['acousticness']+dfs['instrumentalness']
+```
+
+# K Clusters Work
+
+## The Variables
+```{r}
+clust_data = dfs[, c(4,5,9,11,12,14)]
+set.seed(1)
+kmeans_obj = kmeans(clust_data, centers = 3, algorithm = "Lloyd")
+
+kmeans_obj
+
+kmeans_obj$betweenss/kmeans_obj$totss
+
+head(kmeans_obj)
+
+kmeans_obj
+performance_clusters = as.factor(kmeans_obj$cluster)
+
+# What does the kmeans_obj look like?
+
+#ggplot(dfs, aes(x = danceability, y = energy, color = song_popularity,
+                           # shape = performance_clusters)) + 
+  #geom_point(size = 6) +
+  #scale_color_manual(name = "song_popularity",         #<- tell R which colors to use and
+                     #   which labels to include in the legend
+                     #labels = c("Cluster 1", "Cluster 2", "Cluster 3"),#, "Cluster 4", "Cluster 5","Cluster 6"),
+                     #values = c("red", "blue", "green"))+#, "black", "orange", "pink")) +
+  #theme_light()
+ggplot(dfs, aes(x = danceability, 
+                            y = energy,
+                            color = song_popularity,
+                            shape = performance_clusters))+
+  geom_point()+
+  scale_shape_manual(name = "Cluster", 
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3"),
+                     values = c("1", "2", "3")) +
+  scale_color_gradient(low = "#F8400F", high = "#30EA07", name = "Popularity")
+```

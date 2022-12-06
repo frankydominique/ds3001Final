@@ -1,0 +1,70 @@
+---
+title: "finalProjectWork"
+output: html_document
+date: "2022-12-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(plotly)
+library(htmltools)
+library(devtools)
+library(caret)
+library(NbClust)
+library(rmarkdown)
+```
+
+```{r}
+df <- read_csv('song_data.csv')
+View(df)
+dfs <- as.data.frame(scale(df[2:15]))
+View(dfs)
+dfs <- cbind(dfs, df[1])
+```
+
+```{r}
+normalize <- function(x) {
+  
+}
+```
+
+
+# Data Cleaning
+
+```{r}
+dfs <- dfs[!(dfs['song_duration_ms'] >= 8),]
+dfs[]
+```
+
+# K Clusters Work
+
+## The Variables
+```{r}
+clust_data = dfs[, c(2:14)]
+set.seed(1)
+kmeans_obj = kmeans(clust_data, centers = 13, algorithm = "Lloyd")
+
+kmeans_obj
+
+kmeans_obj$betweenss/kmeans_obj$totss
+
+head(kmeans_obj)
+
+kmeans_obj
+performance_clusters = as.factor(kmeans_obj$cluster)
+
+# What does the kmeans_obj look like?
+
+ggplot(dfs, aes(x = song_duration_ms, y = song_popularity, color = performance_clusters,
+                            shape = performance_clusters)) + 
+  geom_point(size = 6) +
+  scale_color_manual(name = "Clusters",         #<- tell R which colors to use and
+                     #   which labels to include in the legend
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5","Cluster 6", "Cluster 7", "Cluster 8", "Cluster 9", "Cluster 10", "Cluster 11", "Cluster 12", "Cluster 13"),
+                     values = c("red", "blue", "green", "black", "orange", "pink", "gray", "yellow", "purple", "turquoise", "brown", "beige", "white")) +
+  theme_light()
+```

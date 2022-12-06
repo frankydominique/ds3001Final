@@ -1,0 +1,307 @@
+---
+title: "Clustering Lab"
+author: "Franceska Padilla Coo"
+date: "Nov 10, 2022"
+output:
+  html_document:
+    toc: TRUE
+    theme: sandstone
+    toc_float: TRUE
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE, cache=TRUE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Project Prompt and Description
+
+## Goal: Know how to make decisions and answer questions using clustering. 
+
+Repeat the clustering process only using the Rep house votes dataset
+- What differences and similarities did you see between how the clustering 
+worked for the datasets?
+
+In a separate Rmarkdown document work through a similar process 
+with the NBA data (nba2020-21 and nba_salaries_21), merge them together. 
+
+You are a scout for the worst team in the NBA, probably the Wizards. Your 
+general manager just heard about Data Science and thinks it can solve all the
+teams problems!!! She wants you to figure out a way to find players that are 
+high performing but maybe not highly paid that you can steal to get the team 
+to the playoffs! 
+
+## Details: 
+
+- Determine a way to use clustering to estimate based on performance if 
+players are under or over paid, generally. 
+
+## Hints:
+
+- Salary is the variable you are trying to understand 
+- You should include numerous performance variables in the clustering but when 
+interpreting you might want to use graphs that include variables that are the 
+most correlated with Salary
+- You'll need to standardize the variables before performing the clustering
+- Be specific about why you selected the players that you did, more detail is 
+better
+- Use good coding practices, comment heavily, indent, don't use for loops unless
+totally necessary and create modular sections that align with some outcome. If 
+necessary create more than one script,list/load libraries at the top and don't 
+include libraries that aren't used. 
+- Be careful for non-traditional characters in the players names, certain graphs won't work when these characters are included.
+- Don't search for code online, as there may be some present but I change the
+requirements slightly every semester. 
+  
+# Data Overview
+```{r}
+library(tidyverse)
+library(plotly)
+library(htmltools)
+library(devtools)
+library(caret)
+library(NbClust)
+library(rmarkdown)
+```
+
+```{r}
+df <- read_csv('NBA_Perf_22.csv')
+drops <- c("Tm")
+df<- df[ , !(names(df) %in% drops)]
+df1 <- read_csv('nba_salaries_22.csv')
+```
+
+# Data Cleaning
+
+For data cleaning, I first made sure that all cases used were complete. This way, when the model ran, it would not get an error. In addition, the number of complete cases did not significantly decrease the amount of possible data to work with because there were zero incomplete cases. 
+
+Another thing I checked for was if there were repeats. Because I wanted to find general performance and each player should only show up once to get a feel for their performance, I found the players who appeared more than once in the data set. I then took the average of their performance statistics to get a feel for how they are. This way I can account for the peak and falls of their career. I, then, combined the cleaned data set of player statistics with the dataset on their salaries.
+
+```{r}
+df <- df[complete.cases(df),]
+sum(is.na(df))
+df1 <- df1[complete.cases(df1),]
+sum(is.na(df1))
+
+n_occur <- data.frame(table(df$Player))
+n_occur[n_occur$Player > 1,]
+repeats <- df[df$Player %in% n_occur$Var1[n_occur$Freq >1],]
+
+repeatsSet <- unique(repeats$Player)
+
+test = data.frame((sapply(repeats,c)))
+test[, 3:28] <- apply(test[, 3:28], 2, function(x) as.numeric(as.character(x)))
+
+## for each player
+## remove all instances of each player from the df
+## then run the below code
+## append the mean of the columns to the original df
+
+temp <- data.frame(matrix(ncol=28, nrow = 0))
+
+playerAvgs <- function(x) {
+  testSubset = test[test$Player == x,]
+  testSubsetPos = testSubset[1,2]
+  numericCols = colMeans(testSubset[,3:28])
+  replacementRow = c(x, testSubsetPos, numericCols)
+  return(replacementRow)
+  test[nrow(test) + 1,] = replacementRow
+}
+
+repeatedPlayersAveraged <- lapply(repeatsSet, playerAvgs)
+repeatedPlayersAveragedDF <- as.data.frame(do.call(rbind,repeatedPlayersAveraged))
+names(repeatedPlayersAveragedDF)[1] = "Player"
+names(repeatedPlayersAveragedDF)[2] = "Pos"
+
+n_occur2 <- data.frame(table(df$Player))
+n_occur2[n_occur2$Player == 1,]
+repeats2 <- df[df$Player %in% n_occur2$Var1[n_occur2$Freq == 1],]
+
+nonRepeatedPlayers = data.frame((sapply(repeats2,c)))
+
+cleanedData <- rbind(repeatedPlayersAveragedDF, nonRepeatedPlayers)
+```
+
+# K Clusters Work
+
+## The Variables
+The variables I chose to include in the k-clustering were number of games (G), minutes played (MP), field goals (FG), assists (AST), points (PTS), field goal assists (FGA), 3 pointers (X3P), 3 point assists (X3PA), two pointers (X2P), two point assists (X2PA), free throws (FT), offensive rebounds (ORB), personal fouls (PF), and blocks (BLK). I then made a clustering model with five centers. I started with three and found that five clusters was the clearest clustering number to see an identifiable pattern that helped with the decision making process. 
+```{r}
+df2 <- cleanedData %>% inner_join(df1, by="Player")
+df2 <- separate(df2, Salary, c('symbol', 'Salary'), sep = 1)
+df2 <- df2[,-29]
+df2$Salary <- gsub(",","",df2$Salary)
+df2[3:29] <- sapply(df2[3:29],as.numeric)
+  
+#df2$Salary <- as.factor(df2$Salary > mean(df2$Salary))
+#df2$Salary <- fct_collapse(df2$Salary,
+                             # aboveAvg='TRUE',
+                             # belowAvg='FALSE')
+
+clust_data = df2[, c("G", "MP", "FG", "AST", "PTS", "FGA", "X3P", "X3PA", "X2P", "X2PA", "FT", "ORB", "PF", "BLK")]
+set.seed(1)
+kmeans_obj = kmeans(clust_data, centers = 5, algorithm = "Lloyd")
+
+kmeans_obj
+
+kmeans_obj$betweenss/kmeans_obj$totss
+
+head(kmeans_obj)
+
+kmeans_obj
+performance_clusters = as.factor(kmeans_obj$cluster)
+
+# What does the kmeans_obj look like?
+
+ggplot(df2, aes(x = BLK, y = Salary, color = performance_clusters,
+                            shape = performance_clusters)) + 
+  geom_point(size = 6) +
+  ggtitle("G vs Salary") +
+  xlab("G") +
+  ylab("Salary") +
+  scale_shape_manual(name = "Cluster", 
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5"),
+                     values = c("1", "2", "3", "4", "5")) +
+  scale_color_manual(name = "Clusters",         #<- tell R which colors to use and
+                     #   which labels to include in the legend
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5"),
+                     values = c("red", "blue", "green", "black", "orange")) +
+  theme_light()
+```
+
+# OUTPUT {.tabset}
+The following are different graphs of salary against a performance variable with clusters included.
+
+## Games v. Salary
+```{r}
+#divide up salary between above and below a certain amount
+ggplot(df2, aes(x = G, y = Salary, color = performance_clusters,
+                            shape = performance_clusters)) + 
+  geom_point(size = 6) +
+  ggtitle("G vs Salary") +
+  xlab("G") +
+  ylab("Salary") +
+  scale_shape_manual(name = "Cluster", 
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5"),
+                     values = c("1", "2", "3", "4", "5")) +
+  scale_color_manual(name = "Clusters",         #<- tell R which colors to use and
+                     #   which labels to include in the legend
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5"),
+                     values = c("red", "blue", "green", "black", "orange")) +
+  theme_light()
+```
+I would pay special attention to cluster 2. Salary is low but they play often.
+
+## Points v. Salary
+
+```{r}
+ggplot(df2, aes(x = PTS, y = Salary,
+                            color = performance_clusters,  #<- tell R how to color 
+                            #   the data points
+                            shape = performance_clusters)) + 
+  geom_point(size = 6) +
+  ggtitle("G vs PTS") +
+  xlab("G") +
+  ylab("PTS") +
+  scale_shape_manual(name = "Cluster", 
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5"),
+                     values = c("1", "2", "3", "4", "5")) +
+  scale_color_manual(name = "Clusters",         #<- tell R which colors to use and
+                     #   which labels to include in the legend
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5"),
+                     values = c("red", "blue", "green", "black", "orange")) +
+  theme_light()
+```
+
+## Assits vs Salary
+```{r}
+ggplot(df2, aes(x = AST, y = Salary,
+                            color = performance_clusters,  #<- tell R how to color 
+                            #   the data points
+                            shape = performance_clusters)) + 
+  geom_point(size = 6) +
+  ggtitle("G vs AST") +
+  xlab("G") +
+  ylab("AST") +
+  scale_shape_manual(name = "Cluster", 
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5"),
+                     values = c("1", "2", "3", "4", "5")) +
+  scale_color_manual(name = "Clusters",         #<- tell R which colors to use and
+                     #   which labels to include in the legend
+                     labels = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5"),
+                     values = c("red", "blue", "green", "black", "orange")) +
+  theme_light()
+```
+
+# Variable Relationships {.tabset}
+The following are the variable relationships used to asses which player would be the best to steal. Two statistics that can help with the success of the team will be along the x- and y-axes. Salary is the 3rd dimension of the chart, colored with the lightest having the highest salary and the darkest having the lowest salaries.
+
+## Blocks vs Steals
+
+```{r}
+var1 <- ggplot(df2, aes(x = BLK, y = STL, label= Player, color = Salary)) + 
+  geom_point(size = 3)
+
+ggplotly(var1)
+```
+
+## Offensive rebounds vs Defensive Rebounds
+
+```{r}
+var1 <- ggplot(df2, aes(x = ORB, y = DRB, label= Player, color = Salary)) + 
+  geom_point(size = 3)
+
+ggplotly(var1)
+```
+
+## 3-Pointers vs 2-Pointers
+
+```{r}
+var1 <- ggplot(df2, aes(x = X3P, y = X2P, label= Player, color = Salary)) + 
+  geom_point(size = 3)
+
+ggplotly(var1)
+```
+
+## Assits vs Points
+
+```{r}
+var1 <- ggplot(df2, aes(x = AST, y = PTS, label= Player, color = Salary)) + 
+  geom_point(size = 3)
+
+ggplotly(var1)
+```
+
+## 2 Pointers vs Offensive Rebounds
+
+```{r}
+var1 <- ggplot(df2, aes(x = X2P, y = ORB, label= Player, color = Salary)) + 
+  geom_point(size = 3)
+
+ggplotly(var1)
+```
+
+
+# Decision
+## Then select players you believe would be best for your team and explain why. Do so in 
+three categories: examples that are not good choices, several options that are and those that you might consider. Three tiers: Yes, Maybe and examples of No
+
+### Yes
+Points has a strong correlation with salary. Because of this, three players I believe would be best for my team would be Darius Garland, Tyler Herro, and Ja Morant. Ja Morant has good statistics for getting points and is balanced when scoring but also making assists. Darius Garland has high assists and high points. I believe these people are the best choices because they have relatively good statistics, often on the higher side, but are not paid well so it could be easy to steal them from another team. Jakob Poetl would be good because his rebounds and 2-pointers are high.
+
+### Maybe
+Other options I would consider are Andre Drummond and Jakob Poetl. Both are strong defensively and would be a good addition. They do well with both offensive and defensive rebounds, which could also be an indicator of height, which is advantageous. It would also be good to have players who are good at defense in case there is a turnover.
+
+### No
+I wouldn't consider Trae Young, Kevin Durant, or Rudy Gobert. They are outliers and do exceptionally well, the first two in offensive statistics and Rudy in defensive statitics. However, they are paid significantly and would be hard to steal based off of salary alone.
+
+- Provide a well commented and clean (knitted) report of your findings that can be presented to your GM. Include a rationale for variable selection, details on your approach and a overview of the results with supporting visualizations. 
+
+
+
+
+
+
+
+
