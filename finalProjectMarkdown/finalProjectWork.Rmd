@@ -16,6 +16,11 @@ library(devtools)
 library(caret)
 library(NbClust)
 library(rmarkdown)
+library(caret)
+library(ROCR)
+library(MLmetrics)
+library(mltools)
+library(rpart.plot)
 ```
 
 ```{r}
@@ -78,4 +83,99 @@ ggplot(dfs, aes(x = danceability,
                      labels = c("Cluster 1", "Cluster 2", "Cluster 3"),
                      values = c("1", "2", "3")) +
   scale_color_gradient(low = "#F8400F", high = "#30EA07", name = "Popularity")
+```
+
+Decision Tree Model
+```{r}
+df['hype'] <- df['energy'] + df['danceability']+df['loudness']+df['audio_valence']+df['tempo']
+df['performance'] <- df['liveness'] + df['speechiness']
+df['rawness'] <- df['acousticness']+df['instrumentalness']
+dfRegr <- df[,-c(1)]
+
+set.seed(1999)
+part_index_1 <- caret::createDataPartition(dfRegr$song_popularity,
+                                           times=1,
+                                           p = 0.60,
+                                           groups=1,
+                                           list=FALSE)
+
+train <- dfRegr[part_index_1, ]
+tune_and_test <- dfRegr[-part_index_1, ]
+train
+#The we need to use the function again to create the tuning set 
+
+tune_and_test_index <- createDataPartition(tune_and_test$song_popularity,
+                                           p = .5,
+                                           list = FALSE,
+                                           times = 1)
+
+tune <- tune_and_test[tune_and_test_index, ]
+test <- tune_and_test[-tune_and_test_index, ]
+
+
+dim(train)
+dim(test) 
+dim(tune)
+```
+
+```{r}
+features <- train[,-1]#dropping 1 because it's target variable. 
+View(features)
+target <- train$song_popularity
+
+target
+
+str(features)
+
+str(target)
+#Three steps in building a caret ML model
+#Step 1: Cross validation process-the process by which the training data will be used to build the initial model must be set. As seen below:
+
+fitControl <- trainControl(method = "repeatedcv",
+                          number = 13,
+                          repeats = 8) 
+# number - number of folds
+# repeats - number of times the CV is repeated, takes the average of these repeat rounds
+#review the documentation on https://topepo.github.io/caret/measuring-performance.htm
+
+#Step 2: Usually involves setting a hyper-parameter search. This is optional and the hyper-parameters vary by model. Let's take a look at the documentation for the model we are going to use. Same search function as for classification 
+
+tree.grid <- expand.grid(maxdepth=c(3:20))
+
+#  2^(k+1)−1 = maximum number of terminal nodes (splits) when k=depth of the tree
+#let's look at the documentation in two places 
+# for the tune grid function: https://topepo.github.io/caret/model-training-and-tuning.html
+
+#options for the rpart2: https://topepo.github.io/caret/train-models-by-tag.html#tree-based-model
+
+#Step 3: Train the models
+set.seed(1984)
+popularity_mdl_r <- train(x=features,
+                y=target,
+                method="rpart2",
+                trControl=fitControl,
+                metric="RMSE")
+popularity_mdl_r
+
+popularity_mdl_1_r <- train(x=features,
+                y=target,
+                method="rpart2",#type of model uses maxdepth to select a model
+                trControl=fitControl,#previously created
+                tuneGrid=tree.grid,#expanded grid
+                metric="RMSE")
+popularity_mdl_r
+```
+
+```{r}
+popularity_mdl_r
+popularity_mdl_1_r
+
+plot(popularity_mdl_1_r)
+plot(popularity_mdl_r)
+varImp(popularity_mdl_1_r)
+
+rpart.plot(popularity_mdl_1_r$finalModel, type=5,extra=101)
+
+popularity_mdl_r$results
+
 ```
