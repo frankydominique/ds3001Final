@@ -1,0 +1,398 @@
+---
+title: "Final Project - Compensation Predictions"
+author: "Srini, Ramya, Franceska, Claire"
+date: "12/9/2022"
+output:
+  html_document:
+    toc: TRUE
+    theme: sandstone
+    toc_float: TRUE
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(rio)
+library(plyr)
+library(tidyverse)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(caret)
+library(C50)
+library(readr)
+library(mlbench)
+library(corrplot)
+library(ggcorrplot)
+library(NbClust)
+library(data.table)
+library(scales)
+```
+
+# Question and Background Information
+The question we have selected is to determine which factors are important in predicted yearly compensation.
+This data set contains information about salary for employees at multiple companies with factors such as bonus, race, education, gender, etc.
+We are asking this question because this can apply to a real-world situation where it is important to know which factors might play a role in determining an individual’s salary. 
+
+This [article](https://repository.library.georgetown.edu/handle/10822/559300) shows that higher education levels relate to higher salaries. It also shows that there is an earning gap across different genders.
+
+This [article](https://www.researchgate.net/publication/345033598_Analysis_on_Factors_That_Affect_the_Salary_of_Undergraduates) shows that the popularity of the college can affect an undergraduate’s starting salary. 
+
+
+
+# Exploratory Data Analysis
+```{r}
+# read the STEM data
+data <- read.csv("Levels_Fyi_Salary_Data.csv")
+# str(data)
+# check the column index
+column_index <- tibble(colnames(data))
+# drop unneeded variables
+```
+
+
+```{r}
+data2 <- data[, c(-1,-3,-9,-14,-15,-16,-17,-18,-19,-20,-21,-22,-23,-24,-25,-26,-27,-28)]
+# get rid of weird value in gender variable (Title: Senior Software Engineer)
+data2 <- data2[-11011, ]
+
+data3 <- data2[complete.cases(data2), ]
+
+data3$title <- fct_collapse(data3$title, 
+                           BUSI.MGMT = c("Business Analyst", "Management Consultant", "Marketing", "Product Manager", "Sales", "Technical Program Manager"),
+                           Engineer.Scientist = c("Data Scientist", "Hardware Engineer", "Mechanical Engineer", "Software Engineer","Software Engineering Manager"),
+                           Other = c("Human Resources", "Product Designer", "Recruiter", "Solution Architect")
+                          )
+FAANG = data3 %>% filter(company %in% c("Facebook", "Amazon", "Apple", "Netflix", "Google", "AWS", "google", "Google LLC", "GOogle"))
+Tier2 = data3 %>% filter(company %in% c("Microsoft", "IBM", "Capital One", "Capital one", "Ibm", "ibm", "Intel", "intel", "Intel Corporation", "intel corporation", "Intel corporation", "jp morgan", "Jp Morgan", "JP Morgan", "JP Morgan Chase", "JPMorgan", "JPMORGAN", "JPmorgan Chase", "JPMorgan Chase", "microsoft", "MICROSOFT", "microsoft corporation", "Microsoft Corporation", "Oracle", "oracle", "ORACLE", "paypal", "Paypal", "PayPal", "Salesforce", "salesforce", "SAP", "Sap", "SAP Concur", "Shopify", "Accenture", "Adobe", "Bloomberg", "Bloomberg LP", "Cisco", "Cisco Meraki", "cisco", "cisco systems", "Cisco Systems", "CISCO SYSTEMS", "Deloitte", "Deloitte Advisory", "Deloitte consulting", "Deloitte Consulting", "Deloitte Consulting LLP", "eBay", "ebay", "Ebay", "Expedia", "Expedia Group", "Goldman Sachs", "LinkedIn", "Linkedin", "Dell", "Dell Technologies", "Intuit", "Lyft", "Nvidia", "NVIDIA", "nvidia", "Qualcomm", "qualcomm", "ServiceNow", "Servicenow", "Twitter", "Uber", "UBER", "uber", "visa", "Visa", "VISA", "Visa inc", "Visa Inc", "vmware", "Vmware", "VMware", "VMWare", "walmart", "Walmart", "walmart labs", "Walmart labs", "walmart labs", "Wayfair"))
+others = data3 %>% filter(!company %in% c("Facebook", "Amazon", "Apple", "Netflix", "Google", "AWS","Microsoft", "IBM", "Capital One", "Capital one", "Ibm", "ibm", "Intel", "intel", "Intel Corporation", "intel corporation", "Intel corporation", "jp morgan", "Jp Morgan", "JP Morgan", "JP Morgan Chase", "JPMorgan", "JPMORGAN", "JPmorgan Chase", "JPMorgan Chase", "microsoft", "MICROSOFT", "microsoft corporation", "Microsoft Corporation", "Oracle", "oracle", "ORACLE", "paypal", "Paypal", "PayPal", "Salesforce", "salesforce", "SAP", "Sap", "SAP Concur", "Shopify", "Accenture", "Adobe", "Bloomberg", "Bloomberg LP", "Cisco", "Cisco Meraki", "cisco", "cisco systems", "Cisco Systems", "CISCO SYSTEMS", "Deloitte", "Deloitte Advisory", "Deloitte consulting", "Deloitte Consulting", "Deloitte Consulting LLP", "eBay", "ebay", "Ebay", "Expedia", "Expedia Group", "google", "Google LLC", "GOogle", "Goldman Sachs", "LinkedIn", "Linkedin", "Dell", "Dell Technologies", "Intuit", "Lyft", "Nvidia", "NVIDIA", "nvidia", "Qualcomm", "qualcomm", "ServiceNow", "Servicenow", "Twitter", "Uber", "UBER", "uber", "visa", "Visa", "VISA", "Visa inc", "Visa Inc", "vmware", "Vmware", "VMware", "VMWare", "walmart", "Walmart", "walmart labs", "Walmart labs", "walmart labs", "Wayfair"))
+vec1 = pull(FAANG, company)
+vec2 = pull(Tier2, company)
+vec3 = pull(others, company)
+data3$company <- fct_collapse(data3$company, 
+                           FAANG = vec1,
+                           Tier2 = vec2,
+                           Other = vec3
+                          )
+
+data3$Education <- fct_collapse(data3$Education,
+                            Bachelor = "Bachelor's Degree",
+                            Master = "Master's Degree",
+                            PhD = "PhD",
+                            Other = c("Highschool", "Some College")
+                            )
+
+data3[,c(4, 10)] <- lapply(data3[,c(4, 10)], as.factor)
+
+```
+
+
+
+## Data cleaning
+We dropped the following variables: timestamp, level, tag, other details, city id, dmaid, row number, masters degree, bachelor's degree, doctorate degree, high school, some college, race asian, race white, race two or more, race black, race hispanic, and race. We dropped all the 0/1 education columns because we had another column called education with the level of education each employee had.
+
+We ended up dropping race after building our first model. We realized that by dropping race, we would lose less data. Initially our dataset was 62,642 rows long and after getting rid of all rows with at least one NA value, we were left with 21,575 - which is about ⅓ of the data we started with. We realized that by first dropping the race column, we could work with 27,758 rows of data, which is slightly better than before. However, we didn’t want to remove it without looking at how race plays a role in determining yearly compensation so we ran the model with it first. Then we saw that race had 0 variable importance, so we then dropped that column and re-ran the model.
+
+Then we converted job title, company, location, and gender to factor variables.
+
+We collapsed the title factor into three levels.
+Business management - business analyst, management consultant, marketing, product manager, sales, technical program manager
+Engineer scientist - data scientist, hardware engineer, mechanical engineer, software engineer, software engineering manager
+Other - human resources, product designer, recruiter, solution architect
+
+We collapsed the company factor into three levels
+FAANG - Facebook, Amazon, Apple, Netflix, and Google
+Tier 2 - IBM, Oracle, Capital one, Intel, Microsoft, etc.
+Other - everything that are not in the first 2 levels
+
+## Correlation Plot
+```{r}
+numeric_cols = unlist(lapply(data3, is.numeric))
+salaries_num <- data3[ , numeric_cols]     
+M = cor(salaries_num)
+ 
+corrplot(M, method="color",
+         type="upper", order="hclust",
+         addCoef.col = "black",
+         tl.col = "black", tl.srt=45,
+         sig.level = 0.01, insig = "blank",
+         diag=FALSE,
+         number.cex=0.5,
+         )
+```
+
+# Methods
+We are building a regression model for this dataset.
+
+## Splitting the Data: 
+
+```{r}
+set.seed(777)
+partition <- caret::createDataPartition(data3$totalyearlycompensation,
+                                           times=1,
+                                           p = 0.70,
+                                           groups=1,
+                                           list=FALSE)
+train <- data3[partition, ]
+tune_and_test <- data3[-partition, ]
+#train
+tune_and_test_index <- createDataPartition(tune_and_test$totalyearlycompensation,
+                                           p = .5,
+                                           list = FALSE,
+                                           times = 1)
+tune <- tune_and_test[tune_and_test_index, ]
+test <- tune_and_test[-tune_and_test_index, ]
+#dim(train)
+#dim(test) 
+#dim(tune)
+```
+We split the data into train, tune, and test. We subsetted 70% of the data into train and split the rest equally into tune and test.
+
+```{r}
+ 
+#str(data3)
+features <- train[,-3] # dropping the target variable (totalyearlycompensation). 
+target <- train$totalyearlycompensation
+
+fitControl <- trainControl(method = "repeatedcv",
+                          number = 10,
+                          repeats = 5) 
+
+tree.grid <- expand.grid(maxdepth=c(7:11))
+set.seed(777)
+salary_mdl <- train(x=features,
+                y=target,
+                method="rpart2",
+                trControl=fitControl,
+                tuneGrid=tree.grid,
+                metric="RMSE")
+
+```
+
+# Evaluation of Model
+```{r, include=FALSE}
+#salary_mdl
+#salary_mdl$finalModel
+```
+
+## Ideal Model
+
+### Performance over increasing max tree depths
+
+Initially, we were looking at max tree depths between 3 and 20. The model was substantially improving between depths of 3 to 9. Between depths 10 to 20, the model's performance started to plateau. Therefore, we decided to include a tree depth range from 7 to 11, where 9 is our ideal depth.
+```{r}
+plot(salary_mdl)
+
+```
+
+Looking at the variable importance, the most contributing variables for predicting salary are stock grant value and base salary.
+```{r}
+varImp(salary_mdl)
+salary_mdl$results
+```
+
+Then we predicted the compensation using our test set. The RMSE value decreased to 59,478 which indicates that we did not overfit our model and our model predicted as we expected.
+
+```{r}
+# predicting using base model and test set
+pred_test_reg <- predict(salary_mdl,test)
+postResample(pred = pred_test_reg,obs = test$totalyearlycompensation)
+comparison <- data.frame(test['totalyearlycompensation'], pred_test_reg)
+```
+
+
+### Overlapping Density Plots
+
+We made a plot of overlapping densities to compare our predictions with the actual values. Looking at this graph, we can see that our model isn’t too accurate in predicting compensations. The red line represents the distribution of actual compensations in the test set and the blue line represents the distribution of predicted compensations. When the blue line exactly overlaps the red line, that means that we correctly predicted the number of people with a certain salary. When the blue line is under the red, that means we predicted fewer employees with a certain salary. And when the blue line is over the red, that means that we predicted too many employees having a certain salary. So as you can see, there are many parts of the graph where the model overpredicted and underpredicted the number of employees with a certain salary.
+
+```{r}
+# Normalize data
+normalize = function(x){
+ (x - min(x)) / (max(x) - min(x))
+}
+numerics = names(select_if(comparison, is.numeric))
+comparison2 = lapply(comparison[numerics], normalize)
+# Creating overlapping density plots
+plot(density(comparison2$totalyearlycompensation), col = "blue", main = "Density plots of actual and predicted compensation", xlab = "Normalized compensation", ylab = "Density")
+lines(density(comparison2$pred_test_reg), col = "red")
+legend("topright", legend=c("Actual", "Predicted"), 
+       fill = c("blue","red")
+)
+```
+
+### Actual vs. Predicted Plot
+
+We made a predicted vs actual graph to see how close our predictions were to quantify our observations from the overlapping density plots.Looking at this graph, the x axis represents the compensation our model predicted and the y axis represents the actual compensation amount. For example, let’s look at when predicted compensation is equal to \$375,000 (the 7th “scatter”). The graph shows that we predicted a salary of \$375,000 for multiple compensations. Some compensations were actually lower than \$350,000 while some were higher. The red line represents the case when the predicted compensation equals the actual compensation. So, we want all our points to be as close to the red line as possible. We can see that overall, for each predicted compensation amount, the actual compensations fell a couple thousand higher or lower. However, for the case when the predicted compensation is \$375,000, there are significant outliers. We predicted a compensation of \$375,000 when the actual compensation was in the millions - thus we significantly underestimated the actual compensation. We believe this may be due to the fact that there aren’t a lot of data points on employees getting millions of dollars and so the model was harder to train for those data points. 
+
+```{r}
+ggplot(comparison,                                     
+       aes(x = pred_test_reg,
+           y = totalyearlycompensation)) +
+  geom_point() +
+  geom_abline(intercept = 0,
+              slope = 1,
+              color = "red",
+              size = 2)+
+  ggtitle("Actual compensation vs. Predicted compensation")+
+  labs(y = "Actual yearly compensation", x = "Predicted yearly compensation")+
+  scale_x_continuous(labels = comma)+
+  scale_y_continuous(labels = comma)
+```
+
+### Decision Tree
+
+Our decision tree shows that the data is first split based on base salary and then further split based on stock grant value. The group with the most split was base salary was less than 160E3, greater than or equal to 110E3, and stock grant value less than 54E3. This means that the decision tree might tend to estimate a plurality of the predicted data points to be grouped in a salary of around 169E3. 
+
+
+```{r}
+# our model
+rpart.plot(salary_mdl$finalModel, type=4, extra=101)
+```
+
+NRMSE
+
+```{r}
+RMSE = 59478
+calc_range = range(tune$totalyearlycompensation)
+
+low = calc_range[1]
+high = calc_range[2]
+range = high - low
+NRMSE = RMSE/range
+NRMSE
+# NRMSE = 0.03740755
+```
+
+## Real world model
+
+For the real world model, we dropped stock grant value and base salary. We dropped these variables since those added together make up the total yearly compensation, which essentially will directly predict the total yearly compensation. To properly predict it, we dropped them since a person would not know them usually if they do not know the total yearly compensation. We focused instead on the other variables. For the real world model, we split the data points 70% training and tuning and testing taking up the other 30%.
+
+```{r}
+data4 <- data3[, c(-7,-8,-9)]
+set.seed(777)
+partition2 <- caret::createDataPartition(data4$totalyearlycompensation,
+                                           times=1,
+                                           p = 0.70,
+                                           groups=1,
+                                           list=FALSE)
+train2 <- data4[partition2, ]
+tune_and_test2 <- data4[-partition2, ]
+#train2
+#The we need to use the function again to create the tuning set 
+tune_and_test_index2 <- createDataPartition(tune_and_test2$totalyearlycompensation,
+                                           p = .5,
+                                           list = FALSE,
+                                           times = 1)
+tune2 <- tune_and_test2[tune_and_test_index2, ]
+test2 <- tune_and_test2[-tune_and_test_index2, ]
+# dim(train2)
+# dim(test2) 
+# dim(tune2)
+# str(data4)
+features2 <- train2[,-3] # dropping the target variable (totalyearlycompensation). 
+target2 <- train2$totalyearlycompensation
+# str(features2)
+# str(target2)
+fitControl <- trainControl(method = "repeatedcv",
+                          number = 10,
+                          repeats = 5) 
+tree.grid <- expand.grid(maxdepth=c(3:20))
+#Step 3: Train the model
+set.seed(777)
+salary_mdl2 <- train(x=features2,
+                y=target2,
+                method="rpart2",#type of model uses maxdepth to select a model
+                trControl=fitControl,#previously created
+                tuneGrid=tree.grid,#expanded grid
+                metric="RMSE")
+# str(target2)
+```
+
+### Performance over increasing max tree depths
+
+The max tree depth was around 7, and our RMSE was minimized at 103892. This is going to end up worse than the last model since the last model gave variables that directly correlated with the target variable. Although this is a worse performing model, it resembles the data and conditions that a true prediction would probably be working with. Years of experience and location were the most important variables in this model. That means that the longer you’re in the industry, the more likely your pay will increase. This makes sense since your skill set would probably increase and you would be more familiar with the problems you work with and be a more efficient worker. Additionally, the location is also important. This is probably because big cities like San Francisco and New York pull a lot of talent and are major cities for big, high paying jobs. The closer you are to your company’s headquarters, often in these big cities, the more likely you are playing a bigger and more important role that would lead to a higher paycheck. 
+
+```{r}
+  
+#salary_mdl2
+#salary_mdl2$finalModel
+plot(salary_mdl2)
+varImp(salary_mdl2)
+#years of experience most important
+salary_mdl2$results
+# considering the importance of variable and results(decision tree), the most contributing variable is 'years of experience' and 'location'.
+```
+
+### Decision Tree
+
+```{r, include=FALSE}
+# our model
+rpart.plot(salary_mdl2$finalModel, type=4, extra=101)
+```
+
+
+```{r}
+# predicting using base model and test set
+pred_test_reg2 <- predict(salary_mdl2,test2)
+postResample(pred = pred_test_reg2,obs = test2$totalyearlycompensation)
+comparison3 <- data.frame(test2['totalyearlycompensation'], pred_test_reg2)
+```
+
+### Overlapping Denisty Plots
+This is the density plots of the prediction model and the actual data. As you can see, our model underestimates between 0.0 and 0.2 of the values after normalization. The difference between the two is large. Once the normalized compensation increases past 0.2, we tend to overestimate. In general, though, our model does not do too well of predicting the actual values. It would be better to underestimate the predicted values, however. Underpredicting allows a person to be financially careful and considerate about how they live their lives. It would be better to have an unexpected surplus than not enough money. 
+
+```{r}
+# Normalize data
+numerics2 = names(select_if(comparison3, is.numeric))
+comparison4 = lapply(comparison3[numerics2], normalize)
+# Creating overlapping density plots
+plot(density(comparison4$totalyearlycompensation), col = "blue", main = "Density plots of actual and predicted compensation", xlab = "Normalized compensation", ylab = "Density")
+lines(density(comparison4$pred_test_reg2), col = "red")
+legend("topright", legend=c("Actual", "Predicted"), 
+       fill = c("blue","red")
+)
+```
+
+### Actual vs. Predicted Plot
+```{r}
+ggplot(comparison,                                     
+       aes(x = pred_test_reg2,
+           y = totalyearlycompensation)) +
+  geom_point() +
+  geom_abline(intercept = 0,
+              slope = 1,
+              color = "red",
+              size = 2)+
+  ggtitle("Actual compensation vs. Predicted compensation")+
+  labs(y = "Actual yearly compensation", x = "Predicted yearly compensation")+
+  scale_x_continuous(labels = comma)+
+  scale_y_continuous(labels = comma)
+```
+
+NRMSE
+
+```{r}
+RMSE = 100492
+calc_range = range(tune2$totalyearlycompensation)
+
+low = calc_range[1]
+high = calc_range[2]
+range = high - low
+NRMSE = RMSE/range
+NRMSE
+# NRMSE = 0.06320252
+```
+
+# Fairness Assessment
+In terms of fairness assessment, we had protected classes such as gender and race but according to our variable importance, they didn’t play as big of a role as location and years of experience. However, as we saw from our background research, there were differences in pay across genders. So, this is something we could further investigate using additional data.
+
+
+# Conclusions and Future Work
+The first model had a better RMSE than the second model which makes since the first model included features that were directly related to compensation, such as bonus, base salary, and stock grant value. The second model is more applicable to real world scenarios where you often don’t have the bonus, base salary, and stock grant values on hand. The density plot for the first model showed that we over-predicted and under-predicted the number of employees with a certain compensation whereas the second model showed that we mostly under-predicted. The decision tree for the first model was properly branched out with relevant nodes.
+
+In our real world model, our tree was not properly branched out because there were multiple factor levels for location, which limited the scope of the tree. To further improve upon our model, we could collapse the factor levels for location based on United States regions and other countries. We could also incorporate text analytics to improve our predictions. We have a ‘tag’ column that has information specific to the role such as iOS, API development, full stack, distributed systems, etc. 
