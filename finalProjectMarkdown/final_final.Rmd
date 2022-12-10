@@ -36,7 +36,7 @@ library(scales)
 
 # Question and Background Information
 The question we have selected is to determine which factors are important in predicted yearly compensation.
-This data set contains information about salary for employees at multiple companies with factors such as bonus, race, education, gender, etc.
+This [data set](https://www.kaggle.com/datasets/jackogozaly/data-science-and-stem-salaries) contains information about salary for employees at multiple companies with factors such as bonus, race, education, gender, etc.
 We are asking this question because this can apply to a real-world situation where it is important to know which factors might play a role in determining an individual’s salary. 
 
 This [article](https://repository.library.georgetown.edu/handle/10822/559300) shows that higher education levels relate to higher salaries. It also shows that there is an earning gap across different genders.
@@ -101,13 +101,19 @@ We ended up dropping race after building our first model. We realized that by dr
 Then we converted job title, company, location, and gender to factor variables.
 
 We collapsed the title factor into three levels.
+
 Business management - business analyst, management consultant, marketing, product manager, sales, technical program manager
+
 Engineer scientist - data scientist, hardware engineer, mechanical engineer, software engineer, software engineering manager
+
 Other - human resources, product designer, recruiter, solution architect
 
 We collapsed the company factor into three levels
+
 FAANG - Facebook, Amazon, Apple, Netflix, and Google
+
 Tier 2 - IBM, Oracle, Capital one, Intel, Microsoft, etc.
+
 Other - everything that are not in the first 2 levels
 
 ## Correlation Plot
@@ -393,6 +399,6 @@ In terms of fairness assessment, we had protected classes such as gender and rac
 
 
 # Conclusions and Future Work
-The first model had a better RMSE than the second model which makes since the first model included features that were directly related to compensation, such as bonus, base salary, and stock grant value. The second model is more applicable to real world scenarios where you often don’t have the bonus, base salary, and stock grant values on hand. The density plot for the first model showed that we over-predicted and under-predicted the number of employees with a certain compensation whereas the second model showed that we mostly under-predicted. The decision tree for the first model was properly branched out with relevant nodes.
+The first model had a better RMSE than the second model which makes sense the first model included features that were directly related to compensation, such as bonus, base salary, and stock grant value. The second model is more applicable to real world scenarios where you often don’t have the bonus, base salary, and stock grant values on hand. The density plot for the first model showed that we over-predicted and under-predicted the number of employees with a certain compensation whereas the second model showed that we mostly under-predicted. The decision tree for the first model was properly branched out with relevant nodes.
 
-In our real world model, our tree was not properly branched out because there were multiple factor levels for location, which limited the scope of the tree. To further improve upon our model, we could collapse the factor levels for location based on United States regions and other countries. We could also incorporate text analytics to improve our predictions. We have a ‘tag’ column that has information specific to the role such as iOS, API development, full stack, distributed systems, etc. 
+In our real world model, our tree was not properly branched out because there were multiple factor levels for location, which limited the scope of the tree. To further improve upon our model, we could collapse the factor levels for location based on United States regions and other countries. We could also incorporate text analytics to improve our predictions. We have a ‘tag’ column that has information specific to the role such as iOS, API development, full stack, distributed systems, etc. This is something we'd like to look more into.
